@@ -68,7 +68,7 @@ export default function Home() {
 
           <div className="flex items-center justify-center gap-3 pt-1">
             <span className="text-muted-foreground/50 text-sm">or</span>
-            <Link href="/upload">
+            <Link href="/search">
               <Button
                 className="gap-2 rounded-full border-border/40 bg-white/50 backdrop-blur-sm transition-all duration-200 hover:bg-white/70 hover:shadow-md dark:bg-white/5 dark:hover:bg-white/10"
                 variant="outline"
