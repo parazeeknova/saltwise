@@ -8,6 +8,7 @@ import type {
   PrescriptionMedicine,
   PrescriptionParseResult,
   SafetyInfo,
+  ShoppingOption,
 } from "./types";
 
 export const MOCK_DRUGS: Drug[] = [
@@ -697,7 +698,7 @@ function buildAlternatives(drug: Drug): DrugAlternative[] {
 
     // Generate consistent mock shopping options
     const basePrice = alt.price ?? 100;
-    const allOptions = [
+    const allOptions: ShoppingOption[] = [
       {
         pharmacy: "1mg" as const,
         price: basePrice,
@@ -723,7 +724,8 @@ function buildAlternatives(drug: Drug): DrugAlternative[] {
         inStock: Math.random() > 0.3, // Randomly out of stock
       },
     ];
-    const shoppingOptions = allOptions.filter((o) => o.inStock);
+
+    const shoppingOptions = allOptions.filter((o) => o.inStock); // Only show in-stock options for better UX
 
     return {
       drug: alt,
