@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Instrument_Sans, Instrument_Serif, Outfit } from "next/font/google";
+import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import "./globals.css";
 
@@ -40,7 +41,8 @@ export default function RootLayout({
         className={`${instrumentSerif.variable} ${instrumentSans.variable} ${outfit.variable} font-body antialiased`}
       >
         <SiteHeader />
-        <main>{children}</main>
+        <main className="min-h-screen">{children}</main>
+        <SiteFooter />
       </body>
     </html>
   );

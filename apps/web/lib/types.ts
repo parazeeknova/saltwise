@@ -45,6 +45,13 @@ export type SafetyTier = "exact_generic" | "therapeutic_equivalent";
 
 export type PriceConfidence = "live" | "recent" | "cached" | "estimated";
 
+export interface ShoppingOption {
+  pharmacy: "1mg" | "PharmEasy" | "Apollo" | "Netmeds";
+  price: number;
+  url: string;
+  inStock: boolean;
+}
+
 export interface DrugAlternative {
   drug: Drug;
   pricePerUnit: number;
@@ -52,6 +59,7 @@ export interface DrugAlternative {
   savings: number;
   savingsPercent: number;
   safetyTier: SafetyTier;
+  shoppingOptions: ShoppingOption[];
 }
 
 export interface PharmacyPrice {

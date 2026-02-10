@@ -168,3 +168,34 @@
 .font-body {
   font-family: var(--font-body), sans-serif;
 }
+
+/* Site footer background */
+.site-footer-bg {
+  background-color: oklch(0.975 0.004 165);
+  background-image:
+    radial-gradient(
+      ellipse 60% 50% at 10% 100%,
+      oklch(0.45 0.15 165 / 3%) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 40% 60% at 90% 80%,
+      oklch(0.55 0.12 220 / 2.5%) 0%,
+      transparent 50%
+    );
+}
+
+.dark .site-footer-bg {
+  background-color: oklch(0.135 0.015 240);
+  background-image:
+    radial-gradient(
+      ellipse 60% 50% at 10% 100%,
+      oklch(0.6 0.15 165 / 5%) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 40% 60% at 90% 80%,
+      oklch(0.55 0.12 220 / 4%) 0%,
+      transparent 50%
+    );
+}

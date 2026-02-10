@@ -40,7 +40,7 @@ export default function Home() {
         </div>
 
         <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center overflow-hidden">
-          <div className="fade-in zoom-in-50 h-40 w-40 -translate-y-36 animate-in opacity-70 transition-all duration-1000 ease-out sm:h-80 sm:w-[320px] lg:-translate-y-20 dark:opacity-50">
+          <div className="fade-in zoom-in-50 h-[160px] w-[160px] -translate-y-36 animate-in opacity-100 transition-all duration-1000 ease-out sm:h-[320px] sm:w-[320px] lg:-translate-y-20 dark:opacity-50">
             <Image
               alt="Medicine Bottle"
               className="object-contain"

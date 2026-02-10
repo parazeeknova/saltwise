@@ -50,9 +50,40 @@ import type {
   DrugSearchResult,
   PharmacyPrice,
   SafetyInfo,
+  ShoppingOption,
 } from "@/lib/types";
 
 /* ─── Utility ───────────────────────────────────────────────────────── */
+
+function PharmacyLogo({ pharmacy }: { pharmacy: ShoppingOption["pharmacy"] }) {
+  switch (pharmacy) {
+    case "1mg":
+      return (
+        <span className="font-bold text-[#ff6f61] tracking-tighter">1mg</span>
+      );
+    case "PharmEasy":
+      return (
+        <div className="flex items-center gap-0.5 font-bold tracking-tight">
+          <span className="text-gray-700 dark:text-gray-300">Pharm</span>
+          <span className="text-[#10847e]">Easy</span>
+        </div>
+      );
+    case "Apollo":
+      return (
+        <span className="font-bold text-[#f37021] tracking-tight">Apollo</span>
+      );
+    case "Netmeds":
+      return (
+        <span className="font-bold text-[#32aeb1] tracking-tight">Netmeds</span>
+      );
+    default:
+      return (
+        <span className="font-bold text-foreground/80 tracking-tight">
+          {pharmacy}
+        </span>
+      );
+  }
+}
 
 function confidenceBadgeVariant(confidence: PharmacyPrice["confidence"]) {
   switch (confidence) {
@@ -280,6 +311,35 @@ function AlternativeCard({
             </p>
           </CollapsibleContent>
         </Collapsible>
+
+        {/* Shopping Options */}
+        {alternative.shoppingOptions &&
+          alternative.shoppingOptions.length > 0 && (
+            <div className="mt-4 border-border/30 border-t pt-4">
+              <p className="mb-2 text-[0.6rem] text-muted-foreground/60 uppercase tracking-wider">
+                Available at
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {alternative.shoppingOptions.map((option) => (
+                  <Link
+                    className="group/shop flex items-center gap-3 rounded-lg border border-border/30 bg-muted/20 px-3 py-2 transition-all hover:bg-white/60 hover:shadow-sm dark:hover:bg-white/5"
+                    href={option.url}
+                    key={option.pharmacy}
+                    rel="noopener noreferrer"
+                    target="_blank"
+                  >
+                    <div className="scale-90 transition-transform group-hover/shop:scale-100">
+                      <PharmacyLogo pharmacy={option.pharmacy} />
+                    </div>
+                    <div className="h-4 w-px bg-border/40" />
+                    <span className="font-heading font-medium text-foreground/80 text-xs tabular-nums group-hover/shop:text-foreground">
+                      ₹{option.price}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
       </div>
     </div>
   );

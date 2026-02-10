@@ -692,6 +692,35 @@ function buildAlternatives(drug: Drug): DrugAlternative[] {
     const savingsPercent =
       originalPerUnit > 0 ? (savings / originalPerUnit) * 100 : 0;
 
+    // Generate consistent mock shopping options
+    const basePrice = alt.price ?? 100;
+    const shoppingOptions: ShoppingOption[] = [
+      {
+        pharmacy: "1mg",
+        price: basePrice,
+        url: `https://1mg.com/search/all?name=${encodeURIComponent(alt.brandName)}`,
+        inStock: true,
+      },
+      {
+        pharmacy: "PharmEasy",
+        price: Math.round(basePrice * 0.95), // 5% discount
+        url: `https://pharmeasy.in/search/all?name=${encodeURIComponent(alt.brandName)}`,
+        inStock: true,
+      },
+      {
+        pharmacy: "Apollo",
+        price: Math.round(basePrice * 1.05), // 5% premium
+        url: `https://www.apollopharmacy.in/search-medicines/${encodeURIComponent(alt.brandName)}`,
+        inStock: true,
+      },
+      {
+        pharmacy: "Netmeds",
+        price: Math.round(basePrice * 0.98), // 2% discount
+        url: `https://www.netmeds.com/catalogsearch/result?q=${encodeURIComponent(alt.brandName)}`,
+        inStock: Math.random() > 0.3, // Randomly out of stock
+      },
+    ].filter((o) => o.inStock); // Only show in-stock options for better UX
+
     return {
       drug: alt,
       pricePerUnit: altPerUnit,
@@ -699,6 +728,7 @@ function buildAlternatives(drug: Drug): DrugAlternative[] {
       savings: Math.max(0, savings),
       savingsPercent: Math.max(0, savingsPercent),
       safetyTier: "exact_generic" as const,
+      shoppingOptions,
     };
   });
 }
