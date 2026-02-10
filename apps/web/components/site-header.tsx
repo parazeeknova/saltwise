@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "@saltwise/ui/components/avatar";
 import { Button } from "@saltwise/ui/components/button";
 import { Separator } from "@saltwise/ui/components/separator";
 import {
@@ -18,7 +23,8 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { type SyntheticEvent, useRef, useState } from "react";
+import { useUser } from "@/hooks/use-user";
 
 const PILL_BASE =
   "rounded-full border border-white/30 bg-white/80 shadow-lg backdrop-blur-2xl backdrop-saturate-150 dark:border-white/[0.1] dark:bg-white/[0.05] dark:shadow-[0_8px_32px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.05)] dark:backdrop-saturate-125";
@@ -29,6 +35,7 @@ const navLinks = [
 ] as const;
 
 export function SiteHeader() {
+  const { user } = useUser();
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -36,7 +43,7 @@ export function SiteHeader() {
   const [searchFocused, setSearchFocused] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const handleNavSearch = (e: React.FormEvent) => {
+  const handleNavSearch = (e: SyntheticEvent<HTMLFormElement>) => {
     e.preventDefault();
     const trimmed = navQuery.trim();
     if (trimmed) {
@@ -48,11 +55,10 @@ export function SiteHeader() {
 
   return (
     <header className="fixed top-0 right-0 left-0 z-40 flex w-full justify-center">
-      {/* Desktop split nav */}
       <div className="fade-in slide-in-from-top-4 mt-4 hidden w-full animate-in items-center justify-between px-8 duration-700 ease-out md:flex">
-        {/* Left pill — Logo */}
+        {" "}
         <Link
-          className={`${PILL_BASE} flex h-11 items-center gap-2.5 pr-5 pl-2.5 transition-all duration-200 hover:bg-white/90 hover:shadow-xl dark:hover:bg-white/[0.08]`}
+          className={`${PILL_BASE} flex h-11 items-center gap-2.5 pr-5 pl-2.5 transition-all duration-200 hover:bg-white/90 hover:shadow-xl dark:hover:bg-white/8`}
           href="/"
         >
           <Image
@@ -66,12 +72,9 @@ export function SiteHeader() {
             Salt<span className="text-primary">wise</span>
           </span>
         </Link>
-
-        {/* Right pill — Search, History, Profile */}
         <div
           className={`${PILL_BASE} flex h-11 items-center gap-1 pr-1.5 pl-2.5`}
         >
-          {/* Compact search bar */}
           <form
             className="relative flex items-center"
             onSubmit={handleNavSearch}
@@ -79,8 +82,8 @@ export function SiteHeader() {
             <div
               className={`flex items-center overflow-hidden rounded-full transition-all duration-300 ease-out ${
                 searchFocused
-                  ? "w-52 bg-black/[0.04] ring-1 ring-primary/20 dark:bg-white/[0.08]"
-                  : "w-40 bg-black/[0.03] dark:bg-white/[0.06]"
+                  ? "w-52 bg-black/4 ring-1 ring-primary/20 dark:bg-white/8"
+                  : "w-40 bg-black/3 dark:bg-white/6"
               }`}
             >
               <SearchIcon
@@ -103,10 +106,8 @@ export function SiteHeader() {
             </div>
           </form>
 
-          {/* Divider */}
-          <div className="mx-0.5 h-4 w-px bg-black/[0.06] dark:bg-white/[0.1]" />
+          <div className="mx-0.5 h-4 w-px bg-black/6 dark:bg-white/10" />
 
-          {/* History */}
           <Link href="/history">
             <Button
               className="gap-2 rounded-full"
@@ -118,22 +119,27 @@ export function SiteHeader() {
             </Button>
           </Link>
 
-          {/* Divider */}
-          <div className="mx-0.5 h-4 w-px bg-black/[0.06] dark:bg-white/[0.1]" />
+          <div className="mx-0.5 h-4 w-px bg-black/6 dark:bg-white/10" />
 
-          {/* Profile */}
           <Button
             className="rounded-full text-muted-foreground hover:text-foreground"
             size="icon-sm"
             variant="ghost"
           >
-            <CircleUserRoundIcon className="size-4" strokeWidth={1.8} />
+            <Avatar className="size-5">
+              <AvatarImage
+                alt={user?.user_metadata?.full_name ?? "User avatar"}
+                src={user?.user_metadata?.avatar_url}
+              />
+              <AvatarFallback className="bg-transparent text-muted-foreground">
+                <CircleUserRoundIcon className="size-4" strokeWidth={1.8} />
+              </AvatarFallback>
+            </Avatar>
             <span className="sr-only">Profile</span>
           </Button>
         </div>
       </div>
 
-      {/* Mobile header bar */}
       <div className="flex h-14 w-full items-center justify-between bg-background/80 px-4 backdrop-blur-md md:hidden">
         <Link className="flex items-center gap-2.5" href="/">
           <Image
@@ -147,7 +153,6 @@ export function SiteHeader() {
         </Link>
 
         <div className="flex items-center gap-1">
-          {/* Mobile search shortcut */}
           <Link href="/search">
             <Button size="icon-sm" variant="ghost">
               <SearchIcon className="size-4" />
@@ -155,13 +160,20 @@ export function SiteHeader() {
             </Button>
           </Link>
 
-          {/* Mobile profile */}
           <Button
             className="text-muted-foreground"
             size="icon-sm"
             variant="ghost"
           >
-            <CircleUserRoundIcon className="size-4" strokeWidth={1.8} />
+            <Avatar className="size-5">
+              <AvatarImage
+                alt={user?.user_metadata?.full_name ?? "User avatar"}
+                src={user?.user_metadata?.avatar_url}
+              />
+              <AvatarFallback className="bg-transparent text-muted-foreground">
+                <CircleUserRoundIcon className="size-4" strokeWidth={1.8} />
+              </AvatarFallback>
+            </Avatar>
             <span className="sr-only">Profile</span>
           </Button>
 
