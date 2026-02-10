@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Instrument_Sans, Instrument_Serif, Outfit } from "next/font/google";
+import { ChatDialog } from "@/components/chat/chat-dialog";
+import { ReactQueryProvider } from "@/components/providers/query-provider";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import "./globals.css";
@@ -40,9 +42,12 @@ export default function RootLayout({
       <body
         className={`${instrumentSerif.variable} ${instrumentSans.variable} ${outfit.variable} font-body antialiased`}
       >
-        <SiteHeader />
-        <main className="min-h-screen">{children}</main>
-        <SiteFooter />
+        <ReactQueryProvider>
+          <SiteHeader />
+          <main className="min-h-screen">{children}</main>
+          <SiteFooter />
+          <ChatDialog />
+        </ReactQueryProvider>
       </body>
     </html>
   );

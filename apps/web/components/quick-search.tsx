@@ -1,16 +1,12 @@
 "use client";
 
 import { Kbd } from "@saltwise/ui/components/kbd";
-import {
-  ArrowRightIcon,
-  PillIcon,
-  SearchIcon,
-  SparklesIcon,
-} from "lucide-react";
+import { PillIcon, SearchIcon, SparklesIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useChatStore } from "@/hooks/use-chat-store";
 import { MOCK_DRUGS } from "@/lib/mock-data";
-import { SaltyChat } from "./salty-chat";
+import { RecentChats } from "./recent-chats";
 
 const PLACEHOLDER_MEDICINES = [
   "Dolo 650",
@@ -36,15 +32,15 @@ export function QuickSearch() {
   const [placeholderText, setPlaceholderText] = useState("");
   const [isTyping, setIsTyping] = useState(true);
   const [selectedIndex, setSelectedIndex] = useState(-1);
-  const [mode, setMode] = useState<"search" | "salty">("search");
-  const [saltyInitialMessage, setSaltyInitialMessage] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
+  const { startNewChat } = useChatStore();
+
   // Animated placeholder typing effect
   useEffect(() => {
-    if (query.length > 0 || mode === "salty") {
+    if (query.length > 0) {
       return;
     }
 
@@ -84,7 +80,7 @@ export function QuickSearch() {
     }
 
     return () => clearTimeout(timeout);
-  }, [placeholderIndex, isTyping, query.length, mode]);
+  }, [placeholderIndex, isTyping, query.length]);
 
   // Keyboard shortcut: Cmd/Ctrl + K
   useEffect(() => {
@@ -115,7 +111,7 @@ export function QuickSearch() {
   const isSaltyQuery = query.startsWith("@");
 
   const filteredSuggestions =
-    mode === "search" && !isSaltyQuery && query.length >= 2
+    !isSaltyQuery && query.length >= 2
       ? MOCK_DRUGS.filter(
           (drug) =>
             drug.brandName.toLowerCase().includes(query.toLowerCase()) ||
@@ -136,18 +132,15 @@ export function QuickSearch() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (mode === "salty") {
-      return;
-    }
 
-    // Detect @salty query — switch to chat mode with the message
+    // Detect @salty query — open global chat
     if (isSaltyQuery) {
       const message = query.slice(1).trim();
       if (message) {
-        setSaltyInitialMessage(message);
-        setMode("salty");
+        startNewChat(message);
         setQuery("");
-        setIsFocused(true);
+        setIsFocused(false);
+        inputRef.current?.blur();
       }
       return;
     }
@@ -185,14 +178,6 @@ export function QuickSearch() {
     }
   };
 
-  const exitSaltyMode = useCallback(() => {
-    setMode("search");
-    setQuery("");
-    setSaltyInitialMessage("");
-    setSelectedIndex(-1);
-    setTimeout(() => inputRef.current?.focus(), 0);
-  }, []);
-
   return (
     <div className="w-full max-w-xl" ref={containerRef}>
       {/* Search Container */}
@@ -217,7 +202,7 @@ export function QuickSearch() {
               className={`shrink-0 transition-all duration-300 ${isFocused ? "scale-110 text-primary" : "text-muted-foreground"}
               `}
             >
-              {mode === "salty" || isSaltyQuery ? (
+              {isSaltyQuery ? (
                 // biome-ignore lint/performance/noImgElement: salty mascot
                 // biome-ignore lint/correctness/useImageSize: skip
                 <img
@@ -230,91 +215,70 @@ export function QuickSearch() {
               )}
             </div>
 
-            {/* Input — shown in search mode */}
-            {mode === "search" && (
-              <div className="relative min-w-0 flex-1">
-                <input
-                  aria-label="Search for medicines or type @ to chat with Salty"
-                  className="w-full bg-transparent text-[0.95rem] text-foreground outline-none placeholder:text-transparent"
-                  onChange={handleInputChange}
-                  onFocus={() => setIsFocused(true)}
-                  onKeyDown={handleInputKeyDown}
-                  placeholder={
-                    isSaltyQuery
-                      ? "Ask Salty anything..."
-                      : "Search for a medicine..."
-                  }
-                  ref={inputRef}
-                  type="text"
-                  value={query}
-                />
-                {/* Custom animated placeholder */}
-                {query.length === 0 && (
-                  <div className="pointer-events-none absolute inset-0 flex items-center">
-                    <span className="text-[0.95rem] text-muted-foreground/70">
-                      Search for{" "}
-                      <span className="text-muted-foreground">
-                        {placeholderText}
-                      </span>
-                      <span
-                        className={`ml-px inline-block h-[1.1em] w-0.5 translate-y-px rounded-full bg-primary/60 ${isFocused ? "animate-pulse" : "animate-pulse"}
-                        `}
-                      />
+            {/* Input */}
+            <div className="relative min-w-0 flex-1">
+              <input
+                aria-label="Search for medicines or type @ to chat with Salty"
+                className="w-full bg-transparent text-[0.95rem] text-foreground outline-none placeholder:text-transparent"
+                onChange={handleInputChange}
+                onFocus={() => setIsFocused(true)}
+                onKeyDown={handleInputKeyDown}
+                placeholder={
+                  isSaltyQuery
+                    ? "Ask Salty anything..."
+                    : "Search for a medicine..."
+                }
+                ref={inputRef}
+                type="text"
+                value={query}
+              />
+              {/* Custom animated placeholder */}
+              {query.length === 0 && (
+                <div className="pointer-events-none absolute inset-0 flex items-center">
+                  <span className="text-[0.95rem] text-muted-foreground/70">
+                    Search for{" "}
+                    <span className="text-muted-foreground">
+                      {placeholderText}
                     </span>
-                  </div>
-                )}
-              </div>
-            )}
+                    <span
+                      className={`ml-px inline-block h-[1.1em] w-0.5 translate-y-px rounded-full bg-primary/60 ${isFocused ? "animate-pulse" : "animate-pulse"}
+                      `}
+                    />
+                  </span>
+                </div>
+              )}
+            </div>
 
-            {/* Salty mode label — replaces input when in salty mode */}
-            {mode === "salty" && (
-              <div className="min-w-0 flex-1">
-                <span className="text-[0.95rem] text-primary/80">
-                  Chatting with Salty
-                </span>
-              </div>
-            )}
+            {/* Kbd shortcut hint */}
+            <div
+              className={`hidden shrink-0 items-center gap-1 transition-opacity duration-200 sm:flex ${isFocused ? "opacity-0" : "opacity-100"}`}
+            >
+              <Kbd className="border border-border/60 bg-muted/60 px-1.5 font-body text-[0.6rem] text-muted-foreground">
+                ⌘K
+              </Kbd>
+            </div>
 
-            {/* Kbd shortcut hint — search mode only */}
-            {mode === "search" && (
-              <div
-                className={`hidden shrink-0 items-center gap-1 transition-opacity duration-200 sm:flex ${isFocused ? "opacity-0" : "opacity-100"}`}
-              >
-                <Kbd className="border border-border/60 bg-muted/60 px-1.5 font-body text-[0.6rem] text-muted-foreground">
-                  ⌘K
-                </Kbd>
-              </div>
-            )}
-
-            {/* Submit arrow — search mode */}
-            {mode === "search" && (
-              <button
-                aria-label="Search"
-                className={`absolute top-1.5 right-1.5 bottom-1.5 z-10 flex aspect-square items-center justify-center rounded-full shadow-sm transition-colors ${
-                  query.length > 0
-                    ? "bg-primary text-primary-foreground hover:bg-primary/80"
-                    : "bg-muted text-muted-background/50 hover:bg-primary/40"
-                }`}
-                type="submit"
-              >
-                <ArrowRightIcon className="size-5" strokeWidth={2.5} />
-              </button>
-            )}
-
-            {/* Close button — salty mode */}
-            {mode === "salty" && (
-              <button
-                aria-label="Back to search"
-                className="absolute top-1.5 right-1.5 bottom-1.5 z-10 flex aspect-square items-center justify-center rounded-full bg-muted text-muted-foreground shadow-sm transition-colors hover:bg-muted/80"
-                onClick={exitSaltyMode}
-                type="button"
-              >
-                <SearchIcon className="size-4" strokeWidth={2.5} />
-              </button>
-            )}
+            {/* Submit arrow */}
+            <button
+              aria-label="Search"
+              className={`absolute top-1.5 right-1.5 bottom-1.5 z-10 flex aspect-square items-center justify-center rounded-full transition-all duration-300 ${
+                query.length > 0
+                  ? "opacity-100 hover:scale-105"
+                  : "opacity-60 grayscale hover:opacity-100 hover:grayscale-0"
+              }`}
+              type="submit"
+            >
+              {/* biome-ignore lint/performance/noImgElement: static asset */}
+              {/** biome-ignore lint/correctness/useImageSize: skip */}
+              <img
+                alt="Search"
+                className="size-12 object-contain"
+                src="/landing-assets/pill-triangle.webp"
+              />
+            </button>
           </div>
 
-          {/* Inline Suggestions Dropdown — search mode only */}
+          {/* Inline Suggestions Dropdown */}
           {showSuggestions && (
             <div className="border-border/30 border-t">
               <div className="px-3 py-2">
@@ -358,25 +322,20 @@ export function QuickSearch() {
               </div>
             </div>
           )}
-
-          {/* Salty Chat — shown in salty mode */}
-          {mode === "salty" && (
-            <div className="border-border/30 border-t">
-              <SaltyChat
-                initialMessage={saltyInitialMessage}
-                onClose={exitSaltyMode}
-              />
-            </div>
-          )}
         </div>
       </form>
 
-      {/* Popular Searches - Quick-Pick Pills — only in search mode */}
-      {mode === "search" && (
-        <div
-          className={`mt-4 flex flex-wrap items-center justify-center gap-2 transition-all duration-500 ${isFocused && filteredSuggestions.length > 0 ? "translate-y-1 opacity-0" : "translate-y-0 opacity-100"}
-          `}
-        >
+      {/* Popular Searches - Quick-Pick Pills */}
+      <div
+        className={`mt-4 flex flex-col items-center gap-4 transition-all duration-500 ${
+          isFocused && filteredSuggestions.length > 0
+            ? "translate-y-1 opacity-0"
+            : "translate-y-0 opacity-100"
+        }`}
+      >
+        <RecentChats />
+
+        <div className="flex flex-wrap items-center justify-center gap-2">
           <span className="flex items-center gap-1.5 text-muted-foreground/60 text-xs">
             <SparklesIcon className="size-3" />
             Popular
@@ -397,7 +356,7 @@ export function QuickSearch() {
             </button>
           ))}
         </div>
-      )}
+      </div>
     </div>
   );
 }

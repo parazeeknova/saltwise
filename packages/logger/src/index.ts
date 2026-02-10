@@ -20,7 +20,14 @@ export const rootLogger = pino({
   ],
   transport: isProduction
     ? undefined
-    : { target: "pino-pretty", options: { colorize: true } },
+    : {
+        target: "pino-pretty",
+        options: {
+          colorize: true,
+          ignore: "pid,hostname",
+          translateTime: "SYS:standard",
+        },
+      },
 });
 
 export const authLogger = rootLogger.child({ module: "auth" });

@@ -5,6 +5,7 @@ import type {
   DrugSearchResult,
   PharmacyPrice,
   SafetyInfo,
+  ShoppingOption,
 } from "./types";
 
 export const MOCK_DRUGS: Drug[] = [
@@ -694,7 +695,7 @@ function buildAlternatives(drug: Drug): DrugAlternative[] {
 
     // Generate consistent mock shopping options
     const basePrice = alt.price ?? 100;
-    const shoppingOptions: ShoppingOption[] = [
+    const allOptions: ShoppingOption[] = [
       {
         pharmacy: "1mg",
         price: basePrice,
@@ -719,7 +720,9 @@ function buildAlternatives(drug: Drug): DrugAlternative[] {
         url: `https://www.netmeds.com/catalogsearch/result?q=${encodeURIComponent(alt.brandName)}`,
         inStock: Math.random() > 0.3, // Randomly out of stock
       },
-    ].filter((o) => o.inStock); // Only show in-stock options for better UX
+    ];
+
+    const shoppingOptions = allOptions.filter((o) => o.inStock); // Only show in-stock options for better UX
 
     return {
       drug: alt,
