@@ -1,13 +1,5 @@
 "use client";
 
-import { Badge } from "@saltwise/ui/components/badge";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@saltwise/ui/components/card";
 import {
   Empty,
   EmptyDescription,
@@ -21,26 +13,76 @@ import {
   InputGroupInput,
 } from "@saltwise/ui/components/input-group";
 import { Skeleton } from "@saltwise/ui/components/skeleton";
-import { SearchIcon, XIcon } from "lucide-react";
+import { PillIcon, SearchIcon, SparklesIcon, XIcon } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { MedicineCard } from "@/components/medicine-card";
 import { useDebounce } from "@/hooks/use-debounce";
-import { MOCK_DRUGS } from "@/lib/mock-data";
-import type { Drug, DrugSearchResponse } from "@/lib/types";
+import { searchMockDrugs } from "@/lib/mock-data";
+import type { DrugSearchResult } from "@/lib/types";
+
+function LoadingSkeleton() {
+  return (
+    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+        <div
+          className="overflow-hidden rounded-2xl border border-border/40 bg-white/60 backdrop-blur-xl dark:bg-white/[0.04]"
+          key={i}
+          style={{ animationDelay: `${i * 60}ms` }}
+        >
+          <Skeleton className="h-36 w-full rounded-none" />
+          <div className="space-y-2 p-4">
+            <Skeleton className="h-5 w-3/4" />
+            <Skeleton className="h-3.5 w-1/2" />
+            <div className="flex gap-2 pt-2">
+              <Skeleton className="h-5 w-14 rounded-full" />
+              <Skeleton className="h-5 w-14 rounded-full" />
+            </div>
+            <div className="flex items-end justify-between pt-4">
+              <Skeleton className="h-6 w-16" />
+              <Skeleton className="size-8 rounded-full" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Fetch search results from the API with mock fallback. */
+async function fetchSearchResults(query: string): Promise<DrugSearchResult[]> {
+  try {
+    const res = await fetch(
+      `/api/search?q=${encodeURIComponent(query)}&type=medicine`
+    );
+    if (!res.ok) {
+      throw new Error("API not ready");
+    }
+
+    const data = await res.json();
+
+    if (data.type === "medicine" && Array.isArray(data.results)) {
+      return data.results as DrugSearchResult[];
+    }
+    return [];
+  } catch {
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    return searchMockDrugs(query);
+  }
+}
 
 function SearchContent() {
   const searchParams = useSearchParams();
-  const initialQuery = searchParams.get("q") || "";
+  const initialQuery = searchParams.get("q") ?? "";
   const router = useRouter();
 
   const [query, setQuery] = useState(initialQuery);
   const debouncedQuery = useDebounce(query, 300);
-  const [results, setResults] = useState<Drug[]>([]);
+  const [results, setResults] = useState<DrugSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
 
   useEffect(() => {
-    // Sync URL with query state
     if (debouncedQuery) {
       router.replace(`/search?q=${encodeURIComponent(debouncedQuery)}`);
     } else {
@@ -48,180 +90,175 @@ function SearchContent() {
     }
   }, [debouncedQuery, router]);
 
+  const resetResults = useCallback(() => {
+    setResults([]);
+    setHasSearched(false);
+  }, []);
+
   useEffect(() => {
-    async function fetchDrugs() {
-      if (!debouncedQuery.trim()) {
-        setResults([]);
-        setHasSearched(false);
-        return;
-      }
-
-      setLoading(true);
-      setHasSearched(true);
-
-      try {
-        // Try real API first
-        const res = await fetch(
-          `/api/drugs/search?q=${encodeURIComponent(debouncedQuery)}`
-        );
-        if (res.ok) {
-          const data: DrugSearchResponse = await res.json();
-          setResults(data.drugs);
-        } else {
-          throw new Error("API not ready");
-        }
-      } catch (_error) {
-        // Mock data fallback logic
-        const lowerQuery = debouncedQuery.toLowerCase();
-        // Simulate network delay for realism
-        await new Promise((resolve) => setTimeout(resolve, 600));
-
-        const mockResults = MOCK_DRUGS.filter(
-          (drug) =>
-            drug.brandName.toLowerCase().includes(lowerQuery) ||
-            drug.salt.toLowerCase().includes(lowerQuery)
-        );
-        setResults(mockResults);
-      } finally {
-        setLoading(false);
-      }
+    if (!debouncedQuery.trim()) {
+      resetResults();
+      return;
     }
 
-    fetchDrugs();
-  }, [debouncedQuery]);
+    setLoading(true);
+    setHasSearched(true);
+
+    fetchSearchResults(debouncedQuery)
+      .then((medicineResults) => {
+        setResults(medicineResults);
+      })
+      .finally(() => setLoading(false));
+  }, [debouncedQuery, resetResults]);
 
   const clearSearch = () => {
     setQuery("");
-    setResults([]);
-    setHasSearched(false);
+    resetResults();
     router.replace("/search");
   };
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-12 sm:px-6">
-      <div className="mb-8 space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <SearchIcon className="size-5" />
-          </div>
-          <h1 className="font-medium font-title text-3xl">Drug Search</h1>
-        </div>
-        <p className="text-muted-foreground">
-          Search for medicines by brand name or salt composition to find generic
-          alternatives.
-        </p>
-
-        <div className="relative">
-          <InputGroup className="h-12 shadow-sm focus-within:ring-2 focus-within:ring-primary/20">
-            <InputGroupAddon className="pl-3">
-              <SearchIcon className="size-5 text-muted-foreground" />
-            </InputGroupAddon>
-            <InputGroupInput
-              autoFocus
-              className="text-base placeholder:text-muted-foreground/50"
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search e.g. Dolo 650, Paracetamol..."
-              value={query}
-            />
-            {query && (
-              <InputGroupAddon className="pr-3">
-                <button
-                  className="rounded-full p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                  onClick={clearSearch}
-                  type="button"
-                >
-                  <XIcon className="size-4" />
-                </button>
-              </InputGroupAddon>
-            )}
-          </InputGroup>
-        </div>
-      </div>
-
-      <div className="space-y-4">
-        {loading && (
-          <div className="space-y-4">
-            {["s1", "s2", "s3", "s4"].map((id) => (
-              <div
-                className="flex flex-col gap-4 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between"
-                key={id}
-              >
-                <div className="space-y-2">
-                  <Skeleton className="h-5 w-32" />
-                  <Skeleton className="h-4 w-48" />
-                </div>
-                <div className="flex gap-2">
-                  <Skeleton className="h-6 w-16 rounded-full" />
-                  <Skeleton className="h-6 w-20 rounded-full" />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {!loading && hasSearched && results.length === 0 && (
-          <Empty className="py-12">
-            <EmptyMedia variant="icon">
-              <SearchIcon />
-            </EmptyMedia>
-            <EmptyHeader>
-              <EmptyTitle>No medicines found</EmptyTitle>
-              <EmptyDescription>
-                We couldn't find any medicines matching "{query}". Try searching
-                for a different brand or salt name.
-              </EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        )}
-
-        {!loading && hasSearched && results.length > 0 && (
-          <div className="grid gap-4">
-            {results.map((drug) => (
-              <Card
-                className="group transition-all hover:border-primary/40 hover:shadow-sm"
-                key={drug.id}
-                size="sm"
-              >
-                <CardHeader className="flex flex-col gap-1 pb-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                  <div>
-                    <CardTitle className="text-lg text-primary group-hover:underline group-hover:underline-offset-4">
-                      {drug.brandName}
-                    </CardTitle>
-                    <CardDescription className="mt-1 font-medium text-foreground/80">
-                      {drug.salt}
-                    </CardDescription>
-                  </div>
-                  <Badge className="w-fit shrink-0" variant="outline">
-                    {drug.manufacturer}
-                  </Badge>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-2 pt-2">
-                    <Badge className="rounded-md" variant="secondary">
-                      {drug.strength}
-                    </Badge>
-                    <Badge className="rounded-md" variant="secondary">
-                      {drug.form}
-                    </Badge>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-
-        {!(loading || hasSearched) && (
-          <div className="py-12 text-center">
-            <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-full bg-primary/5 text-primary">
-              <SearchIcon className="size-8" />
-            </div>
-            <h3 className="font-medium text-lg">Start your search</h3>
-            <p className="mt-2 text-muted-foreground text-sm">
-              Enter a medicine name above to see details and find cheaper
-              alternatives.
+    <div className="relative min-h-screen">
+      {/* Page content */}
+      <div className="relative z-10 mx-auto max-w-7xl px-4 pt-28 pb-16 sm:px-6 md:pt-32 lg:px-8">
+        {/* Hero header area */}
+        <div className="fade-in slide-in-from-bottom-4 mb-10 animate-in fill-mode-forwards duration-700 ease-out">
+          <div className="mx-auto max-w-2xl text-center">
+            <h1 className="font-title text-4xl text-foreground tracking-tight sm:text-5xl">
+              Find your <span className="text-primary italic">medicine</span>
+            </h1>
+            <p className="mx-auto mt-3 max-w-md text-muted-foreground text-sm sm:text-base">
+              Search by brand name or salt composition to discover generic
+              alternatives and compare prices.
             </p>
           </div>
-        )}
+
+          {/* Search input */}
+          <div className="fade-in slide-in-from-bottom-2 mx-auto mt-8 max-w-xl animate-in fill-mode-forwards delay-150 duration-700 ease-out">
+            <div className="quick-search-container overflow-hidden rounded-2xl border border-border/40 bg-white/70 shadow-lg backdrop-blur-xl transition-all duration-300 focus-within:border-primary/40 focus-within:shadow-primary/5 focus-within:shadow-xl focus-within:ring-[3px] focus-within:ring-primary/10 hover:shadow-xl dark:bg-white/[0.05]">
+              {/* Top accent */}
+              <div className="h-px w-full bg-gradient-to-r from-transparent via-primary/20 to-transparent opacity-0 transition-opacity duration-500 focus-within:opacity-100" />
+
+              <InputGroup className="h-14 border-0 bg-transparent shadow-none ring-0 focus-within:ring-0">
+                <InputGroupAddon className="pl-5">
+                  <SearchIcon
+                    className="size-[1.15rem] text-muted-foreground"
+                    strokeWidth={2.5}
+                  />
+                </InputGroupAddon>
+                <InputGroupInput
+                  autoFocus
+                  className="bg-transparent text-[0.95rem] placeholder:text-muted-foreground/50"
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search e.g. Dolo 650, Paracetamol..."
+                  value={query}
+                />
+                {query && (
+                  <InputGroupAddon className="pr-4">
+                    <button
+                      className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      onClick={clearSearch}
+                      type="button"
+                    >
+                      <XIcon className="size-4" />
+                    </button>
+                  </InputGroupAddon>
+                )}
+              </InputGroup>
+            </div>
+          </div>
+        </div>
+
+        {/* Results area */}
+        <div className="space-y-6">
+          {loading && <LoadingSkeleton />}
+
+          {/* No results */}
+          {!loading && hasSearched && results.length === 0 && (
+            <div className="fade-in animate-in fill-mode-forwards duration-500">
+              <Empty className="py-16">
+                <EmptyMedia variant="icon">
+                  <SearchIcon />
+                </EmptyMedia>
+                <EmptyHeader>
+                  <EmptyTitle className="font-heading">
+                    No medicines found
+                  </EmptyTitle>
+                  <EmptyDescription>
+                    We couldn&apos;t find any medicines matching &quot;{query}
+                    &quot;. Try searching by salt name (e.g. &quot;Paracetamol
+                    &quot; instead of a brand name).
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            </div>
+          )}
+
+          {/* Results grid */}
+          {!loading && hasSearched && results.length > 0 && (
+            <div className="fade-in animate-in fill-mode-forwards duration-500">
+              <p className="mb-4 text-muted-foreground/70 text-xs">
+                {results.length} {results.length === 1 ? "result" : "results"}{" "}
+                for &quot;
+                {debouncedQuery}&quot;
+              </p>
+              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {results.map((result, i) => (
+                  <MedicineCard
+                    index={i}
+                    key={result.drug.id}
+                    result={result}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Empty state - no search yet */}
+          {!(loading || hasSearched) && (
+            <div className="fade-in slide-in-from-bottom-4 animate-in fill-mode-forwards duration-700">
+              <div className="mx-auto max-w-md py-20 text-center">
+                {/* Decorative pill icon */}
+                <div className="relative mx-auto mb-6 flex size-20 items-center justify-center">
+                  <div className="absolute inset-0 rounded-full bg-gradient-to-br from-primary/10 to-accent/10" />
+                  <div className="absolute inset-1 rounded-full bg-white/80 backdrop-blur-sm dark:bg-white/5" />
+                  <PillIcon
+                    className="relative size-8 text-primary/60"
+                    strokeWidth={1.5}
+                  />
+                </div>
+
+                <h3 className="font-title text-foreground text-xl">
+                  Start your search
+                </h3>
+                <p className="mx-auto mt-2 max-w-xs text-muted-foreground text-sm">
+                  Enter a medicine name or salt to see details, generic
+                  alternatives, and price comparisons.
+                </p>
+
+                {/* Popular searches */}
+                <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
+                  <span className="flex items-center gap-1.5 text-muted-foreground/50 text-xs">
+                    <SparklesIcon className="size-3" />
+                    Popular
+                  </span>
+                  {["Dolo 650", "Pan 40", "Augmentin", "Shelcal"].map(
+                    (term) => (
+                      <button
+                        className="inline-flex items-center rounded-full border border-border/40 bg-white/50 px-3 py-1.5 font-medium text-foreground/70 text-xs shadow-sm backdrop-blur-sm transition-all duration-200 hover:border-primary/30 hover:bg-primary/5 hover:text-foreground hover:shadow-md active:scale-95 dark:bg-white/[0.04]"
+                        key={term}
+                        onClick={() => setQuery(term)}
+                        type="button"
+                      >
+                        {term}
+                      </button>
+                    )
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
