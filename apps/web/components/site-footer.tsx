@@ -55,7 +55,7 @@ export function SiteFooter() {
           <div className="grid grid-cols-1 gap-12 sm:grid-cols-2 lg:grid-cols-12 lg:gap-8">
             {/* Brand column */}
             <div className="lg:col-span-4">
-              <Link className="group inline-flex items-center gap-2.5" href="/">
+              {/* <Link className="group inline-flex items-center gap-2.5" href="/">
                 <Image
                   alt="Saltwise"
                   className="size-7 transition-transform duration-300 group-hover:scale-110"
@@ -66,7 +66,7 @@ export function SiteFooter() {
                 <span className="font-bold font-heading text-lg tracking-tight">
                   Salt<span className="text-primary">wise</span>
                 </span>
-              </Link>
+              </Link> */}
               <p className="mt-4 max-w-xs text-muted-foreground/80 text-sm leading-relaxed">
                 Find safe, government-approved generic alternatives for your
                 branded medicines. Save on every prescription.
@@ -161,6 +161,23 @@ export function SiteFooter() {
                 Saltwise is an informational platform and is not a substitute
                 for professional medical advice, diagnosis, or treatment.
               </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Big Ass Saltwise */}
+        <div className="pointer-events-none flex w-full justify-center pt-8 pb-4">
+          <div className="flex items-baseline gap-[1vw]">
+            <span className="select-none bg-gradient-to-b from-muted-foreground/80 to-transparent bg-clip-text font-bold font-heading text-transparent leading-none tracking-tighter lg:text-[16vw]">
+              Saltwise
+            </span>
+            <div className="relative size-[2vw] rounded-full shadow">
+              <Image
+                alt="Pill Circle"
+                className="object-contain"
+                fill
+                src="/landing-assets/fullstop.png"
+              />
             </div>
           </div>
         </div>
