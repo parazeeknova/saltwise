@@ -11,6 +11,34 @@ export interface Drug {
   price?: number;
   packSize?: number;
   image?: string;
+  drugClass?: string;
+  regulatoryStatus?: "approved" | "tentative" | "withdrawn";
+  schedule?: string;
+}
+
+export type PregnancyCategory = "A" | "B" | "C" | "D" | "X";
+
+export type InteractionSeverity =
+  | "mild"
+  | "moderate"
+  | "severe"
+  | "contraindicated";
+
+export interface DrugInteraction {
+  drugId: string;
+  drugName: string;
+  severity: InteractionSeverity;
+  description: string;
+}
+
+export interface SafetyInfo {
+  sideEffects: string[];
+  dosageInfo: string;
+  maxDailyDose: string;
+  pregnancyCategory: PregnancyCategory;
+  lactationWarning?: string;
+  pediatricWarning?: string;
+  geriatricWarning?: string;
 }
 
 export type SafetyTier = "exact_generic" | "therapeutic_equivalent";
@@ -42,6 +70,9 @@ export interface DrugSearchResult {
   prices: PharmacyPrice[];
   isSubstitutable: boolean;
   ntiWarning?: string;
+  safetyInfo?: SafetyInfo;
+  interactions?: DrugInteraction[];
+  aiExplanation?: string;
 }
 
 export interface DrugSearchResponse {

@@ -17,7 +17,6 @@ import { PillIcon, SearchIcon, SparklesIcon, XIcon } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { MedicineCard } from "@/components/medicine-card";
-import { MeshBackground } from "@/components/mesh-background";
 import { useDebounce } from "@/hooks/use-debounce";
 import { searchMockDrugs } from "@/lib/mock-data";
 import type { DrugSearchResult } from "@/lib/types";
@@ -120,8 +119,6 @@ function SearchContent() {
 
   return (
     <div className="relative min-h-screen">
-      <MeshBackground opacity={0.6} />
-
       {/* Page content */}
       <div className="relative z-10 mx-auto max-w-7xl px-4 pt-28 pb-16 sm:px-6 md:pt-32 lg:px-8">
         {/* Hero header area */}
