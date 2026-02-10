@@ -7,9 +7,10 @@ export const runtime = "nodejs";
 
 /**
  * Maximum characters per TTS chunk. Deepgram handles up to ~2000 characters
- * per request reliably. Using 1500 chars keeps us within a safe boundary.
+ * per request reliably. Using 1950 chars keeps us within a safe boundary
+ * while minimizing the number of API calls for most messages.
  */
-const MAX_CHUNK_CHARS = 1500;
+const MAX_CHUNK_CHARS = 1950;
 
 /**
  * Absolute maximum input length we accept (prevents abuse with massive payloads).
@@ -19,6 +20,60 @@ const MAX_INPUT_LENGTH = 50_000;
 
 /** Matches whitespace — hoisted to top level for performance. */
 const WHITESPACE_RE = /\s/;
+
+/**
+ * Strips Markdown formatting and special characters that cause TTS to read
+ * unwanted punctuation (like "asterisk", "dash", "hash").
+ *
+ * Keeps sentence-ending punctuation and meaningful text.
+ */
+function cleanTextForTts(text: string): string {
+  let cleaned = text;
+
+  // --- Block Level Elements (process first to avoid inline conflicts) ---
+
+  // 1. Remove code blocks (fences and language identifier)
+  // ```typescript\nconst x = 1;``` -> const x = 1;
+  cleaned = cleaned.replace(/```[\w-]*\n?([\s\S]*?)```/g, "$1");
+
+  // 2. Remove horizontal rules (---, ***, ___)
+  cleaned = cleaned.replace(/^[*\-_]{3,}\s*$/gm, "");
+
+  // 3. Remove heading markers (# Heading)
+  cleaned = cleaned.replace(/^#+\s+/gm, "");
+
+  // 4. Remove list bullets (* Item, - Item) -> Just "Item"
+  cleaned = cleaned.replace(/^[*-]\s+/gm, "");
+
+  // 5. Remove blockquotes (> Text) -> Text
+  cleaned = cleaned.replace(/^>\s+/gm, "");
+
+  // --- Inline Elements ---
+
+  // 6. Remove images ![alt](url) -> "" (skip images)
+  cleaned = cleaned.replace(/!\[([^\]]*)\]\([^)]+\)/g, "");
+
+  // 7. Remove Markdown links [text](url) -> text
+  // We only want to read the text part
+  cleaned = cleaned.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+
+  // 8. Remove inline code `const x` -> const x
+  cleaned = cleaned.replace(/`([^`]+)`/g, "$1");
+
+  // 9. Remove bold/italic markers (**text**, *text*, __text__, _text_)
+  // Handle bold first (longer match)
+  cleaned = cleaned.replace(/(\*\*|__)(.*?)\1/g, "$2");
+  // Handle italic second
+  cleaned = cleaned.replace(/(\*|_)(.*?)\1/g, "$2");
+
+  // --- Cleanup ---
+
+  // 10. Collapse multiple spaces/newlines into single space
+  // This helps flow and prevents long pauses
+  cleaned = cleaned.replace(/\s+/g, " ").trim();
+
+  return cleaned;
+}
 
 /**
  * Split text into chunks of at most `maxChars` characters, preferring to break
@@ -221,12 +276,23 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    // 3. Split into chunks and synthesize
-    const chunks = splitTextIntoChunks(text, MAX_CHUNK_CHARS);
+    // 3. Clean text (remove Markdown) and then split into chunks
+    const cleanedText = cleanTextForTts(text);
+
+    // If text was only Markdown and is now empty, fallback to original or specific message
+    const textToSynthesize =
+      cleanedText.length > 0 ? cleanedText : "No readable content found.";
+
+    const chunks = splitTextIntoChunks(textToSynthesize, MAX_CHUNK_CHARS);
     const resolvedModel = model ?? TTS_MODEL;
 
     aiLogger.info(
-      { userId: user.id, textLength: text.length, chunks: chunks.length },
+      {
+        userId: user.id,
+        origLength: text.length,
+        cleanLength: textToSynthesize.length,
+        chunks: chunks.length,
+      },
       "Starting TTS synthesis via Deepgram"
     );
 

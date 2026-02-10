@@ -36,6 +36,15 @@ export function useTts({ onError }: UseTtsOptions = {}): UseTtsReturn {
   // Use a ref for autoRead so autoPlay always sees the latest value
   const autoReadRef = useRef(false);
 
+  // Load autoRead preference from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem("saltwise-tts-autoread");
+    if (saved === "true") {
+      setAutoRead(true);
+      autoReadRef.current = true;
+    }
+  }, []);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -157,8 +166,10 @@ export function useTts({ onError }: UseTtsOptions = {}): UseTtsReturn {
 
   const toggleAutoRead = useCallback(() => {
     setAutoRead((prev) => {
-      autoReadRef.current = !prev;
-      return !prev;
+      const newVal = !prev;
+      autoReadRef.current = newVal;
+      localStorage.setItem("saltwise-tts-autoread", String(newVal));
+      return newVal;
     });
   }, []);
 
@@ -173,8 +184,14 @@ export function useTts({ onError }: UseTtsOptions = {}): UseTtsReturn {
       if (autoPlayedRef.current.has(messageId)) {
         return;
       }
+
+      console.log(`[TTS] Auto-playing message ${messageId}`);
       autoPlayedRef.current.add(messageId);
-      play(messageId, text);
+
+      // Small delay to ensure UI is ready and feels natural
+      setTimeout(() => {
+        play(messageId, text);
+      }, 500);
     },
     [play]
   );

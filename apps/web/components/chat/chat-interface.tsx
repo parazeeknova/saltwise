@@ -25,7 +25,7 @@ async function readStream(
   response: Response,
   assistantMessageId: string,
   setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>
-) {
+): Promise<string> {
   const reader = response.body?.getReader();
   if (!reader) {
     throw new Error("No response stream");
@@ -33,6 +33,7 @@ async function readStream(
 
   const decoder = new TextDecoder();
   let done = false;
+  let fullText = "";
 
   while (!done) {
     const result = await reader.read();
@@ -40,6 +41,7 @@ async function readStream(
 
     if (result.value) {
       const text = decoder.decode(result.value, { stream: true });
+      fullText += text;
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === assistantMessageId
@@ -49,6 +51,8 @@ async function readStream(
       );
     }
   }
+
+  return fullText;
 }
 
 function formatElapsed(seconds: number): string {
@@ -149,7 +153,13 @@ export function ChatInterface() {
   const lastAssistantIdRef = useRef<string | null>(null);
 
   // --- TTS hook ---
-  const tts = useTts({
+  const {
+    autoPlay: ttsAutoPlay,
+    toggle: ttsToggle,
+    getState: ttsGetState,
+    autoRead: ttsAutoRead,
+    toggleAutoRead: ttsToggleAutoRead,
+  } = useTts({
     onError: (msg) => setError(msg),
   });
 
@@ -320,7 +330,16 @@ export function ChatInterface() {
           queryClient.invalidateQueries({ queryKey: ["conversations"] });
         }
 
-        await readStream(response, assistantMessageId, setChatMessages);
+        const fullResponse = await readStream(
+          response,
+          assistantMessageId,
+          setChatMessages
+        );
+
+        // Auto-read: explicitly trigger TTS now that streaming is complete
+        if (fullResponse.trim()) {
+          ttsAutoPlay(assistantMessageId, fullResponse);
+        }
 
         // After stream ends, invalidate messages to ensure we have the DB state
         if (newConversationId) {
@@ -353,27 +372,9 @@ export function ChatInterface() {
       activeConversationId,
       queryClient,
       setActiveConversation,
+      ttsAutoPlay,
     ]
   );
-
-  // Auto-read: trigger TTS when streaming finishes for the last assistant message
-  const prevStreamingRef = useRef(false);
-  const ttsAutoPlay = tts.autoPlay;
-  useEffect(() => {
-    if (
-      prevStreamingRef.current &&
-      !isStreaming &&
-      lastAssistantIdRef.current
-    ) {
-      const lastMsg = chatMessages.find(
-        (m) => m.id === lastAssistantIdRef.current
-      );
-      if (lastMsg && lastMsg.role === "assistant" && lastMsg.content.trim()) {
-        ttsAutoPlay(lastMsg.id, lastMsg.content);
-      }
-    }
-    prevStreamingRef.current = isStreaming;
-  }, [isStreaming, chatMessages, ttsAutoPlay]);
 
   // Handle initial message from store (e.g. from QuickSearch)
   useEffect(() => {
@@ -451,9 +452,9 @@ export function ChatInterface() {
               }
               key={msg.id}
               messageId={msg.id}
-              onTtsToggle={tts.toggle}
+              onTtsToggle={ttsToggle}
               role={msg.role}
-              ttsState={tts.getState(msg.id)}
+              ttsState={ttsGetState(msg.id)}
             />
           ))}
 
@@ -623,7 +624,7 @@ export function ChatInterface() {
                     <img
                       alt="Stop"
                       className="size-12"
-                      src="/landing-assets/pill-square.webp"
+                      src="/landing-assets/pill-squircle.webp"
                     />
                   ) : (
                     // biome-ignore lint/performance/noImgElement: static asset
@@ -649,18 +650,18 @@ export function ChatInterface() {
             {/* Auto-read toggle */}
             <button
               aria-label={
-                tts.autoRead
+                ttsAutoRead
                   ? "Disable auto-read responses"
                   : "Enable auto-read responses"
               }
-              aria-pressed={tts.autoRead}
+              aria-pressed={ttsAutoRead}
               className={cn(
                 "ml-3 flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[0.6rem] transition-all duration-200",
-                tts.autoRead
+                ttsAutoRead
                   ? "border-primary/30 bg-primary/10 text-primary"
                   : "border-border/40 text-muted-foreground/50 hover:border-border/60 hover:text-muted-foreground/70"
               )}
-              onClick={tts.toggleAutoRead}
+              onClick={ttsToggleAutoRead}
               type="button"
             >
               <Volume2Icon className="size-3" />

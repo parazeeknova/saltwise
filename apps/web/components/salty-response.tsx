@@ -88,7 +88,7 @@ function TtsButton({
         "flex size-6 items-center justify-center rounded-full transition-all duration-200",
         isActive
           ? "bg-primary/10 text-primary"
-          : "hover:!text-primary text-muted-foreground/0 hover:bg-primary/5 group-hover:text-muted-foreground/50"
+          : "text-muted-foreground/40 hover:bg-primary/5 hover:text-primary"
       )}
       disabled={isLoading}
       onClick={() => onToggle(messageId, content)}
