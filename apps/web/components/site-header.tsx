@@ -41,7 +41,7 @@ export function SiteHeader() {
             alt="Saltwise"
             className="size-7"
             height={28}
-            src="/logo.svg"
+            src="/logo.png"
             width={28}
           />
           <span className="font-heading text-lg tracking-tight">Saltwise</span>
@@ -89,7 +89,7 @@ export function SiteHeader() {
                       alt="Saltwise"
                       className="size-6"
                       height={24}
-                      src="/logo.svg"
+                      src="/logo.png"
                       width={24}
                     />
                     <span className="font-heading text-base tracking-tight">
