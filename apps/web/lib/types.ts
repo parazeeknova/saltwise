@@ -10,6 +10,7 @@ export interface Drug {
   isNti?: boolean;
   price?: number;
   packSize?: number;
+  image?: string;
 }
 
 export type SafetyTier = "exact_generic" | "therapeutic_equivalent";

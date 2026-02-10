@@ -422,3 +422,11 @@ export function searchMockDrugs(query: string): DrugSearchResult[] {
   );
   return matched.map(buildMockSearchResult);
 }
+
+export function getDrugById(id: string): DrugSearchResult | null {
+  const drug = MOCK_DRUGS.find((d) => d.id === id);
+  if (!drug) {
+    return null;
+  }
+  return buildMockSearchResult(drug);
+}
