@@ -20,7 +20,6 @@ export function SaltyResponse({
 
   return (
     <div className={cn("flex gap-3", isUser ? "flex-row-reverse" : "flex-row")}>
-      {/* Avatar */}
       <div
         className={cn(
           "flex size-7 shrink-0 items-center justify-center rounded-full",
@@ -34,7 +33,6 @@ export function SaltyResponse({
         )}
       </div>
 
-      {/* Message content */}
       <div
         className={cn(
           "max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed",

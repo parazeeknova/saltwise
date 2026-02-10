@@ -1,23 +1,5 @@
-import {
-  index,
-  pgTable,
-  serial,
-  text,
-  timestamp,
-  uuid,
-} from "drizzle-orm/pg-core";
+import { index, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
-export const posts = pgTable("posts", {
-  id: serial("id").primaryKey(),
-  name: text("name"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow(),
-});
-
-/**
- * Conversations table — tracks chat sessions between users and Salty.
- * Each conversation belongs to a single authenticated user.
- */
 export const conversations = pgTable(
   "saltwise_conversations",
   {
@@ -34,10 +16,6 @@ export const conversations = pgTable(
   (table) => [index("conversations_user_id_idx").on(table.userId)]
 );
 
-/**
- * Messages table — stores individual messages within a conversation.
- * Role is either 'user' or 'assistant'.
- */
 export const messages = pgTable(
   "saltwise_messages",
   {

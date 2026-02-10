@@ -3,7 +3,6 @@
 import { Kbd } from "@saltwise/ui/components/kbd";
 import {
   ArrowRightIcon,
-  BotIcon,
   PillIcon,
   SearchIcon,
   SparklesIcon,
@@ -30,30 +29,6 @@ const POPULAR_SEARCHES = [
   { label: "Shelcal", salt: "Calcium + D3" },
 ];
 
-function ModeToggle({
-  mode,
-  onToggle,
-}: {
-  mode: "search" | "salty";
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      aria-label={mode === "search" ? "Switch to AI chat" : "Switch to search"}
-      className="flex size-8 shrink-0 items-center justify-center rounded-full transition-all duration-200 hover:bg-primary/10"
-      onClick={onToggle}
-      title={mode === "search" ? "Chat with Salty" : "Back to search"}
-      type="button"
-    >
-      {mode === "search" ? (
-        <BotIcon className="size-4 text-primary/70" strokeWidth={2} />
-      ) : (
-        <SearchIcon className="size-4 text-primary/70" strokeWidth={2} />
-      )}
-    </button>
-  );
-}
-
 export function QuickSearch() {
   const [query, setQuery] = useState("");
   const [isFocused, setIsFocused] = useState(false);
@@ -62,6 +37,7 @@ export function QuickSearch() {
   const [isTyping, setIsTyping] = useState(true);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [mode, setMode] = useState<"search" | "salty">("search");
+  const [saltyInitialMessage, setSaltyInitialMessage] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -136,8 +112,10 @@ export function QuickSearch() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const isSaltyQuery = query.startsWith("@");
+
   const filteredSuggestions =
-    query.length >= 2
+    mode === "search" && !isSaltyQuery && query.length >= 2
       ? MOCK_DRUGS.filter(
           (drug) =>
             drug.brandName.toLowerCase().includes(query.toLowerCase()) ||
@@ -145,8 +123,7 @@ export function QuickSearch() {
         ).slice(0, 5)
       : [];
 
-  const showSuggestions =
-    mode === "search" && isFocused && filteredSuggestions.length > 0;
+  const showSuggestions = isFocused && filteredSuggestions.length > 0;
 
   const navigateToSearch = useCallback(
     (searchQuery: string) => {
@@ -162,11 +139,29 @@ export function QuickSearch() {
     if (mode === "salty") {
       return;
     }
+
+    // Detect @salty query — switch to chat mode with the message
+    if (isSaltyQuery) {
+      const message = query.slice(1).trim();
+      if (message) {
+        setSaltyInitialMessage(message);
+        setMode("salty");
+        setQuery("");
+        setIsFocused(true);
+      }
+      return;
+    }
+
     if (selectedIndex >= 0 && filteredSuggestions[selectedIndex]) {
       navigateToSearch(filteredSuggestions[selectedIndex].brandName);
     } else {
       navigateToSearch(query);
     }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setQuery(e.target.value);
+    setSelectedIndex(-1);
   };
 
   const handleInputKeyDown = (e: React.KeyboardEvent) => {
@@ -190,10 +185,12 @@ export function QuickSearch() {
     }
   };
 
-  const toggleMode = useCallback(() => {
-    setMode((prev) => (prev === "search" ? "salty" : "search"));
+  const exitSaltyMode = useCallback(() => {
+    setMode("search");
     setQuery("");
+    setSaltyInitialMessage("");
     setSelectedIndex(-1);
+    setTimeout(() => inputRef.current?.focus(), 0);
   }, []);
 
   return (
@@ -215,45 +212,32 @@ export function QuickSearch() {
           />
 
           <div className="relative flex items-center gap-2 py-3.5 pr-14 pl-5">
-            {/* Mode toggle */}
-            <ModeToggle mode={mode} onToggle={toggleMode} />
-
-            {/* Search Icon / Salty indicator */}
+            {/* Search / Salty Icon */}
             <div
               className={`shrink-0 transition-all duration-300 ${isFocused ? "scale-110 text-primary" : "text-muted-foreground"}
               `}
             >
-              {mode === "search" ? (
-                <SearchIcon className="size-[1.15rem]" strokeWidth={2.5} />
-              ) : (
+              {mode === "salty" || isSaltyQuery ? (
                 <SparklesIcon className="size-[1.15rem]" strokeWidth={2.5} />
+              ) : (
+                <SearchIcon className="size-[1.15rem]" strokeWidth={2.5} />
               )}
             </div>
 
-            {/* Mode badge */}
-            <span
-              className={`shrink-0 rounded-full px-2 py-0.5 font-heading text-[0.55rem] uppercase tracking-wider transition-colors ${
-                mode === "salty"
-                  ? "bg-primary/10 text-primary"
-                  : "bg-muted/60 text-muted-foreground"
-              }`}
-            >
-              {mode === "salty" ? "Salty AI" : "Search"}
-            </span>
-
-            {/* Input — only shown in search mode */}
+            {/* Input — shown in search mode */}
             {mode === "search" && (
               <div className="relative min-w-0 flex-1">
                 <input
-                  aria-label="Search for medicines"
+                  aria-label="Search for medicines or type @ to chat with Salty"
                   className="w-full bg-transparent text-[0.95rem] text-foreground outline-none placeholder:text-transparent"
-                  onChange={(e) => {
-                    setQuery(e.target.value);
-                    setSelectedIndex(-1);
-                  }}
+                  onChange={handleInputChange}
                   onFocus={() => setIsFocused(true)}
                   onKeyDown={handleInputKeyDown}
-                  placeholder="Search for a medicine..."
+                  placeholder={
+                    isSaltyQuery
+                      ? "Ask Salty anything..."
+                      : "Search for a medicine..."
+                  }
                   ref={inputRef}
                   type="text"
                   value={query}
@@ -276,19 +260,27 @@ export function QuickSearch() {
               </div>
             )}
 
-            {/* Spacer for salty mode */}
-            {mode === "salty" && <div className="min-w-0 flex-1" />}
+            {/* Salty mode label — replaces input when in salty mode */}
+            {mode === "salty" && (
+              <div className="min-w-0 flex-1">
+                <span className="text-[0.95rem] text-primary/80">
+                  Chatting with Salty
+                </span>
+              </div>
+            )}
 
-            {/* Kbd shortcut hint */}
-            <div
-              className={`hidden shrink-0 items-center gap-1 transition-opacity duration-200 sm:flex ${isFocused ? "opacity-0" : "opacity-100"}`}
-            >
-              <Kbd className="border border-border/60 bg-muted/60 px-1.5 font-body text-[0.6rem] text-muted-foreground">
-                ⌘K
-              </Kbd>
-            </div>
+            {/* Kbd shortcut hint — search mode only */}
+            {mode === "search" && (
+              <div
+                className={`hidden shrink-0 items-center gap-1 transition-opacity duration-200 sm:flex ${isFocused ? "opacity-0" : "opacity-100"}`}
+              >
+                <Kbd className="border border-border/60 bg-muted/60 px-1.5 font-body text-[0.6rem] text-muted-foreground">
+                  ⌘K
+                </Kbd>
+              </div>
+            )}
 
-            {/* Submit arrow — only in search mode */}
+            {/* Submit arrow — search mode */}
             {mode === "search" && (
               <button
                 aria-label="Search"
@@ -300,6 +292,18 @@ export function QuickSearch() {
                 type="submit"
               >
                 <ArrowRightIcon className="size-5" strokeWidth={2.5} />
+              </button>
+            )}
+
+            {/* Close button — salty mode */}
+            {mode === "salty" && (
+              <button
+                aria-label="Back to search"
+                className="absolute top-1.5 right-1.5 bottom-1.5 z-10 flex aspect-square items-center justify-center rounded-full bg-muted text-muted-foreground shadow-sm transition-colors hover:bg-muted/80"
+                onClick={exitSaltyMode}
+                type="button"
+              >
+                <SearchIcon className="size-4" strokeWidth={2.5} />
               </button>
             )}
           </div>
@@ -352,7 +356,10 @@ export function QuickSearch() {
           {/* Salty Chat — shown in salty mode */}
           {mode === "salty" && (
             <div className="border-border/30 border-t">
-              <SaltyChat onClose={() => setMode("search")} />
+              <SaltyChat
+                initialMessage={saltyInitialMessage}
+                onClose={exitSaltyMode}
+              />
             </div>
           )}
         </div>
