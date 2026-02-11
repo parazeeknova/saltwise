@@ -3,9 +3,19 @@ import { db } from "@saltwise/db";
 import { drugPrices, drugs, scrapeJobs } from "@saltwise/db/schema";
 import { and, eq, ilike, or, sql } from "drizzle-orm";
 
-const firecrawl = new FirecrawlApp({
-  apiKey: process.env.FIRECRAWL_API_KEY || "",
-});
+let _firecrawl: FirecrawlApp | null = null;
+
+function getFirecrawl(): FirecrawlApp {
+  if (!_firecrawl) {
+    _firecrawl = new FirecrawlApp({
+      apiKey: process.env.FIRECRAWL_API_KEY || "",
+    });
+  }
+  return _firecrawl;
+}
+
+const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
+const SCRAPE_COOLDOWN_MS = 60 * 60 * 1000;
 
 interface DrugPrice {
   pharmacy: string;
@@ -51,105 +61,6 @@ interface ExtractedMedicine {
   in_stock?: boolean;
 }
 
-export async function searchAndScrape(query: string): Promise<SearchResult> {
-  console.log(`[searchAndScrape] Starting search for: ${query}`);
-  try {
-    console.log("[searchAndScrape] Querying DB...");
-
-    // Use trigram similarity (pg_trgm) for fuzzy matching alongside exact ilike
-    // This handles typos like "norflux" matching "NORflox"
-    const dbResults = await db
-      .select({
-        id: drugs.id,
-        brandName: drugs.brandName,
-        saltComposition: drugs.saltComposition,
-        strength: drugs.strength,
-        manufacturer: drugs.manufacturer,
-        price: drugPrices.price,
-        pharmacy: drugPrices.pharmacyName,
-        inStock: drugPrices.inStock,
-        url: drugPrices.url,
-        updatedAt: drugs.updatedAt,
-      })
-      .from(drugs)
-      .leftJoin(drugPrices, eq(drugs.id, drugPrices.drugId))
-      .where(
-        or(
-          ilike(drugs.brandName, `%${query}%`),
-          ilike(drugs.saltComposition, `%${query}%`),
-          // Trigram fuzzy match: catches typos and misspellings
-          sql`similarity(${drugs.brandName}, ${query}) > 0.3`,
-          sql`similarity(${drugs.saltComposition}, ${query}) > 0.3`
-        )
-      )
-      .orderBy(sql`similarity(${drugs.brandName}, ${query}) DESC`)
-      .limit(10);
-    console.log(`[searchAndScrape] DB returned ${dbResults.length} rows`);
-
-    const groupedDrugs = groupDbResults(dbResults);
-
-    const isStale = groupedDrugs.some((d) => {
-      const lastUpdate = new Date(d.updatedAt).getTime();
-      const now = Date.now();
-      return now - lastUpdate > 24 * 60 * 60 * 1000;
-    });
-
-    const shouldScrape = groupedDrugs.length < 3 || isStale;
-
-    let jobId: string | undefined;
-
-    if (shouldScrape) {
-      // Check if there's already a recent pending/processing job for a similar query
-      // to avoid duplicate scrapes burning API credits
-      const recentJob = await db
-        .select({ id: scrapeJobs.id, status: scrapeJobs.status })
-        .from(scrapeJobs)
-        .where(
-          and(
-            ilike(scrapeJobs.query, `%${query}%`),
-            or(
-              eq(scrapeJobs.status, "pending"),
-              eq(scrapeJobs.status, "processing")
-            )
-          )
-        )
-        .limit(1)
-        .then((rows) => rows[0]);
-
-      if (recentJob) {
-        // A scrape is already in progress for this query, just return its jobId
-        console.log(`[searchAndScrape] Reusing existing job: ${recentJob.id}`);
-        jobId = recentJob.id;
-      } else {
-        const job = await db
-          .insert(scrapeJobs)
-          .values({
-            query,
-            status: "pending",
-          })
-          .returning({ id: scrapeJobs.id })
-          .then((rows) => rows[0]);
-
-        if (job) {
-          jobId = job.id;
-          runBackgroundScrape(job.id, query).catch((err) =>
-            console.error("Background scrape failed:", err)
-          );
-        }
-      }
-    }
-
-    return {
-      source: "db",
-      drugs: groupedDrugs,
-      jobId,
-    };
-  } catch (err) {
-    console.error("[searchAndScrape] Critical error:", err);
-    throw err;
-  }
-}
-
 const medicineSchema = {
   type: "object" as const,
   properties: {
@@ -163,87 +74,59 @@ const medicineSchema = {
   required: ["brand_name", "price"],
 };
 
-export async function runBackgroundScrape(jobId: string, query: string) {
+export async function searchAndScrape(query: string): Promise<SearchResult> {
+  console.log(`[search] Starting search for: "${query}"`);
+
+  // ── Step 1: Check DB first (fast, fuzzy via pg_trgm) ──
+  const dbResults = await queryDatabase(query);
+  const groupedDrugs = groupDbResults(dbResults);
+  console.log(`[search] DB returned ${groupedDrugs.length} grouped drugs`);
+
+  // If we have fresh results, return immediately — no external calls
+  if (groupedDrugs.length >= 1 && !isAnyStale(groupedDrugs)) {
+    console.log("[search] Fresh DB results, returning without external search");
+    return { source: "db", drugs: groupedDrugs };
+  }
+
+  // ── Step 2: Firecrawl search (background) ──
+  let jobId: string | undefined;
+  const shouldFetchExternal =
+    groupedDrugs.length === 0 || isAnyStale(groupedDrugs);
+
+  if (shouldFetchExternal && !(await hasRecentJob(query))) {
+    const job = await createJob(query);
+    if (job) {
+      jobId = job.id;
+      runBackgroundSearch(job.id, query).catch((err) =>
+        console.error("[search] Background search failed:", err)
+      );
+    }
+  }
+
+  return {
+    source: groupedDrugs.length > 0 ? "db" : "firecrawl",
+    drugs: groupedDrugs,
+    jobId,
+  };
+}
+
+export async function runBackgroundSearch(jobId: string, query: string) {
   try {
     await db
       .update(scrapeJobs)
       .set({ status: "processing" })
       .where(eq(scrapeJobs.id, jobId));
 
-    const queryStr = `${query} medicine price India`;
-    console.log(
-      `[runBackgroundScrape] Searching Firecrawl with inline extraction: ${queryStr}`
-    );
+    const storedCount = await firecrawlSearch(query);
 
-    // Use search with scrapeOptions to extract structured data in one call
-    // This eliminates the slow sequential per-URL scrape loop
-    const searchResults = await firecrawl.search(queryStr, {
-      limit: 5,
-      scrapeOptions: {
-        formats: [
-          {
-            type: "json",
-            schema: medicineSchema,
-            prompt:
-              "Extract medicine details: brand name, salt/generic composition, price (numeric only, in INR), manufacturer, pack size (e.g. 'strip of 15 tablets'), and stock availability.",
-          },
-        ],
-      },
-    });
-
-    // v2 SDK returns { web: [...] }
-    const webResults = searchResults.web;
-
-    if (!webResults || webResults.length === 0) {
-      console.log(`[runBackgroundScrape] No results found for: ${queryStr}`);
-      await db
-        .update(scrapeJobs)
-        .set({ status: "completed", resultCount: "0" })
-        .where(eq(scrapeJobs.id, jobId));
-      return;
-    }
-
-    console.log(
-      `[runBackgroundScrape] Found ${webResults.length} results with extracted data`
-    );
-
-    let newCount = 0;
-    for (const result of webResults) {
-      try {
-        // With scrapeOptions, results come back as Document with json field
-        const doc = result as {
-          url?: string;
-          json?: unknown;
-          metadata?: { sourceURL?: string };
-        };
-        const url = doc.url ?? doc.metadata?.sourceURL ?? null;
-        const data = doc.json as ExtractedMedicine | null;
-
-        if (data?.brand_name && data.price && url) {
-          console.log(
-            `[runBackgroundScrape] Storing: ${data.brand_name} @ ₹${data.price} from ${url}`
-          );
-          await storeMedicine(data, url);
-          newCount++;
-        } else if (url) {
-          // Fallback: if search didn't extract data, do a single scrape
-          console.log(
-            `[runBackgroundScrape] No extracted data, falling back to scrape: ${url}`
-          );
-          await extractAndStoreMedicine(url);
-          newCount++;
-        }
-      } catch (e) {
-        console.error("[runBackgroundScrape] Failed to process result:", e);
-      }
-    }
+    console.log(`[backgroundSearch] Stored ${storedCount} results`);
 
     await db
       .update(scrapeJobs)
-      .set({ status: "completed", resultCount: newCount.toString() })
+      .set({ status: "completed", resultCount: storedCount.toString() })
       .where(eq(scrapeJobs.id, jobId));
   } catch (error) {
-    console.error("Scrape job failed:", error);
+    console.error("[backgroundSearch] Job failed:", error);
     await db
       .update(scrapeJobs)
       .set({ status: "failed", error: String(error) })
@@ -251,10 +134,61 @@ export async function runBackgroundScrape(jobId: string, query: string) {
   }
 }
 
+async function firecrawlSearch(query: string): Promise<number> {
+  const queryStr = `${query} medicine price India`;
+  console.log(`[firecrawl] Searching: ${queryStr}`);
+
+  const searchResults = await getFirecrawl().search(queryStr, {
+    limit: 5,
+    scrapeOptions: {
+      formats: [
+        {
+          type: "json",
+          schema: medicineSchema,
+          prompt:
+            "Extract medicine details: brand name, salt/generic composition, price (numeric only, in INR), manufacturer, pack size (e.g. 'strip of 15 tablets'), and stock availability.",
+        },
+      ],
+    },
+  });
+
+  const webResults = searchResults.web;
+
+  if (!webResults || webResults.length === 0) {
+    console.log("[firecrawl] No results found");
+    return 0;
+  }
+
+  console.log(`[firecrawl] Found ${webResults.length} results`);
+
+  let count = 0;
+  for (const result of webResults) {
+    try {
+      const doc = result as {
+        url?: string;
+        json?: unknown;
+        metadata?: { sourceURL?: string };
+      };
+      const url = doc.url ?? doc.metadata?.sourceURL ?? null;
+      const data = doc.json as ExtractedMedicine | null;
+
+      if (data?.brand_name && data.price && url) {
+        await storeMedicine(data, url);
+        count++;
+      } else if (url) {
+        await extractAndStoreMedicine(url);
+        count++;
+      }
+    } catch (e) {
+      console.error("[firecrawl] Failed to process result:", e);
+    }
+  }
+
+  return count;
+}
+
 async function extractAndStoreMedicine(url: string) {
-  // v2 SDK: use `scrape()` (not `scrapeUrl()`)
-  // Use JsonFormat for structured extraction
-  const scrapeResult = await firecrawl.scrape(url, {
+  const scrapeResult = await getFirecrawl().scrape(url, {
     formats: [
       {
         type: "json",
@@ -265,7 +199,6 @@ async function extractAndStoreMedicine(url: string) {
     ],
   });
 
-  // v2 scrape returns Document directly (no .data wrapper)
   if (!scrapeResult?.json) {
     return;
   }
@@ -273,20 +206,33 @@ async function extractAndStoreMedicine(url: string) {
   const data = scrapeResult.json as ExtractedMedicine;
 
   if (!(data.brand_name && data.price)) {
-    console.log("[extractAndStoreMedicine] Missing required fields, skipping");
     return;
   }
 
   await storeMedicine(data, url);
 }
 
-/** Store extracted medicine data into DB (used by both search+extract and fallback scrape) */
+function detectPharmacy(url: string): string {
+  if (url.includes("1mg")) {
+    return "1mg";
+  }
+  if (url.includes("pharmeasy")) {
+    return "PharmEasy";
+  }
+  if (url.includes("apollo")) {
+    return "Apollo";
+  }
+  if (url.includes("netmeds")) {
+    return "Netmeds";
+  }
+  return "Other";
+}
+
 async function storeMedicine(data: ExtractedMedicine, url: string) {
   if (!(data.brand_name && data.price)) {
     return;
   }
 
-  // Upsert drug using unique constraint on (brand_name, manufacturer)
   const drug = await db
     .insert(drugs)
     .values({
@@ -309,16 +255,8 @@ async function storeMedicine(data: ExtractedMedicine, url: string) {
     return;
   }
 
-  let pharmacyName = "Other";
-  if (url.includes("1mg")) {
-    pharmacyName = "1mg";
-  } else if (url.includes("pharmeasy")) {
-    pharmacyName = "PharmEasy";
-  } else if (url.includes("apollo")) {
-    pharmacyName = "Apollo";
-  }
+  const pharmacyName = detectPharmacy(url);
 
-  // Upsert price using unique constraint on (drug_id, pharmacy_name)
   await db
     .insert(drugPrices)
     .values({
@@ -338,6 +276,81 @@ async function storeMedicine(data: ExtractedMedicine, url: string) {
         lastScrapedAt: new Date(),
       },
     });
+}
+
+async function queryDatabase(query: string): Promise<DbRow[]> {
+  return await db
+    .select({
+      id: drugs.id,
+      brandName: drugs.brandName,
+      saltComposition: drugs.saltComposition,
+      strength: drugs.strength,
+      manufacturer: drugs.manufacturer,
+      price: drugPrices.price,
+      pharmacy: drugPrices.pharmacyName,
+      inStock: drugPrices.inStock,
+      url: drugPrices.url,
+      updatedAt: drugs.updatedAt,
+    })
+    .from(drugs)
+    .leftJoin(drugPrices, eq(drugs.id, drugPrices.drugId))
+    .where(
+      or(
+        ilike(drugs.brandName, `%${query}%`),
+        ilike(drugs.saltComposition, `%${query}%`),
+        sql`similarity(${drugs.brandName}, ${query}) > 0.3`,
+        sql`similarity(${drugs.saltComposition}, ${query}) > 0.3`
+      )
+    )
+    .orderBy(sql`similarity(${drugs.brandName}, ${query}) DESC`)
+    .limit(10);
+}
+
+function isAnyStale(grouped: GroupedDrug[]): boolean {
+  const now = Date.now();
+  return grouped.some(
+    (d) => now - new Date(d.updatedAt).getTime() > STALE_THRESHOLD_MS
+  );
+}
+
+async function hasRecentJob(query: string): Promise<boolean> {
+  const cutoff = new Date(Date.now() - SCRAPE_COOLDOWN_MS).toISOString();
+
+  const existing = await db
+    .select({ id: scrapeJobs.id, status: scrapeJobs.status })
+    .from(scrapeJobs)
+    .where(
+      and(
+        ilike(scrapeJobs.query, `%${query}%`),
+        or(
+          eq(scrapeJobs.status, "pending"),
+          eq(scrapeJobs.status, "processing"),
+          and(
+            eq(scrapeJobs.status, "completed"),
+            sql`${scrapeJobs.createdAt} > ${cutoff}`
+          )
+        )
+      )
+    )
+    .limit(1)
+    .then((rows) => rows[0]);
+
+  if (existing) {
+    console.log(
+      `[search] Skipping external search — recent job exists: ${existing.id} (${existing.status})`
+    );
+    return true;
+  }
+
+  return false;
+}
+
+async function createJob(query: string) {
+  return await db
+    .insert(scrapeJobs)
+    .values({ query, status: "pending" })
+    .returning({ id: scrapeJobs.id })
+    .then((rows) => rows[0]);
 }
 
 function groupDbResults(rows: DbRow[]): GroupedDrug[] {

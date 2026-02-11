@@ -179,7 +179,6 @@ export async function GET(
         confidence: "live",
         fetchedAt: p.lastScrapedAt?.toISOString() || new Date().toISOString(),
       })),
-      safetyInfo: metadata.safety_info,
       isSubstitutable: true,
     };
 

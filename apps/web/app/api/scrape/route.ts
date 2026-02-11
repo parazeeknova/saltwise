@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { runBackgroundScrape } from "@/lib/firecrawl/service";
+import { runBackgroundSearch } from "@/lib/firecrawl/service";
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,8 +12,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // This will run in the background (or until timeout)
-    await runBackgroundScrape(jobId, query);
+    await runBackgroundSearch(jobId, query);
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -43,6 +43,7 @@ import {
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useDrugInsights } from "@/hooks/use-drug-insights";
 import { getDrugById } from "@/lib/mock-data";
 import type {
   DrugAlternative,
@@ -852,6 +853,9 @@ export default function MedicineDetailsPage() {
   const [result, setResult] = useState<DrugSearchResult | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Fetch AI insights separately
+  const { data: aiInsights } = useDrugInsights(id as string);
+
   useEffect(() => {
     if (id) {
       // Fetch from API
@@ -885,16 +889,13 @@ export default function MedicineDetailsPage() {
     return <NotFoundState />;
   }
 
-  const {
-    drug,
-    alternatives,
-    prices,
-    isSubstitutable,
-    ntiWarning,
-    safetyInfo,
-    interactions,
-    aiExplanation,
-  } = result;
+  const { drug, alternatives, prices, isSubstitutable, ntiWarning } = result;
+
+  // Get AI data from hook (with fallbacks for loading/error states)
+  const safetyInfo = aiInsights?.safetyInfo;
+  const interactions = aiInsights?.interactions;
+  const aiExplanation = aiInsights?.aiExplanation;
+
   const originalPerUnit =
     drug.price && drug.packSize ? drug.price / drug.packSize : null;
 
@@ -1091,23 +1092,72 @@ export default function MedicineDetailsPage() {
             {/* Quick Facts */}
             <QuickFactsCard delay={200} drug={drug} />
 
-            {/* Safety Information */}
-            {safetyInfo && (
+            {/* Safety Information - with loading state */}
+            {safetyInfo ? (
               <SafetyInfoCard delay={350} safetyInfo={safetyInfo} />
+            ) : (
+              <GlassCard delay={350}>
+                <div className="mb-3 flex items-center gap-2">
+                  <ShieldAlertIcon className="size-3.5 text-primary/70" />
+                  <h3 className="font-heading font-semibold text-xs tracking-tight">
+                    Safety Information
+                  </h3>
+                </div>
+                <div className="space-y-3">
+                  <div className="h-4 w-full animate-pulse rounded bg-muted/40" />
+                  <div className="h-3 w-3/4 animate-pulse rounded bg-muted/40" />
+                  <div className="h-3 w-1/2 animate-pulse rounded bg-muted/40" />
+                </div>
+              </GlassCard>
             )}
 
-            {/* Drug Interactions */}
-            {interactions && interactions.length > 0 && (
+            {/* Drug Interactions - with loading state */}
+            {interactions && interactions.length > 0 ? (
               <InteractionsCard delay={500} interactions={interactions} />
+            ) : (
+              <GlassCard delay={500}>
+                <div className="mb-3 flex items-center gap-2">
+                  <AlertTriangleIcon className="size-3.5 text-primary/70" />
+                  <h3 className="font-heading font-semibold text-xs tracking-tight">
+                    Drug Interactions
+                  </h3>
+                </div>
+                <div className="space-y-2">
+                  <div className="h-8 w-full animate-pulse rounded-lg bg-muted/40" />
+                  <div className="h-8 w-full animate-pulse rounded-lg bg-muted/40" />
+                </div>
+              </GlassCard>
             )}
 
-            {/* AI Explanation */}
-            {aiExplanation && (
+            {/* AI Explanation - with loading state */}
+            {aiExplanation ? (
               <AIExplanationCard
                 delay={650}
                 drugName={drug.brandName}
                 explanation={aiExplanation}
               />
+            ) : (
+              <GlassCard delay={650}>
+                <div className="mb-3 flex items-center gap-2">
+                  {/** biome-ignore lint/performance/noImgElement: skip */}
+                  <img
+                    alt="Salty"
+                    className="size-4 object-contain"
+                    height={16}
+                    src="/salty.png"
+                    width={16}
+                  />
+                  <h3 className="font-heading font-semibold text-xs tracking-tight">
+                    Why is this cheaper?
+                  </h3>
+                </div>
+                <div className="space-y-2">
+                  <div className="h-3 w-full animate-pulse rounded bg-muted/40" />
+                  <div className="h-3 w-5/6 animate-pulse rounded bg-muted/40" />
+                  <div className="h-3 w-4/5 animate-pulse rounded bg-muted/40" />
+                  <div className="h-3 w-3/4 animate-pulse rounded bg-muted/40" />
+                </div>
+              </GlassCard>
             )}
           </div>
         </div>

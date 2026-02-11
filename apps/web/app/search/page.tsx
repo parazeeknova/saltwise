@@ -13,18 +13,13 @@ import {
   InputGroupInput,
 } from "@saltwise/ui/components/input-group";
 import { Skeleton } from "@saltwise/ui/components/skeleton";
-import {
-  Loader2Icon,
-  PillIcon,
-  RefreshCwIcon,
-  SearchIcon,
-  XIcon,
-} from "lucide-react";
+import { Loader2Icon, PillIcon, SearchIcon, XIcon } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { MedicineCard } from "@/components/medicine-card";
 import { PrescriptionChips } from "@/components/prescription-chips";
 import { PrescriptionUpload } from "@/components/prescription-upload";
+import { SearchProgressUI } from "@/components/search-progress";
 import { useDebounce } from "@/hooks/use-debounce";
 import type { SearchResult } from "@/lib/firecrawl/service";
 import type { DrugSearchResult, PrescriptionMedicine } from "@/lib/types";
@@ -168,6 +163,14 @@ function SearchContent() {
 
   const [query, setQuery] = useState(initialQuery);
   const debouncedQuery = useDebounce(query, 300);
+
+  // Sync query with URL params (e.g. when navigating from other pages or using nav search)
+  useEffect(() => {
+    if (initialQuery !== debouncedQuery) {
+      setQuery(initialQuery);
+    }
+  }, [initialQuery, debouncedQuery]);
+
   const [results, setResults] = useState<DrugSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
@@ -180,37 +183,6 @@ function SearchContent() {
   const [activeChipIndex, setActiveChipIndex] = useState<number | null>(null);
   const [processingPrescription, setProcessingPrescription] = useState(false);
   const pendingProcessed = useRef(false);
-
-  // Poll for job updates
-  useEffect(() => {
-    if (!activeJobId) {
-      return;
-    }
-
-    const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/jobs/${activeJobId}`);
-        if (res.ok) {
-          const job = await res.json();
-          if (job.status === "completed") {
-            setActiveJobId(undefined); // Stop polling
-            // Re-fetch results to show new data
-            if (debouncedQuery) {
-              const { results: newResults } =
-                await fetchSearchResults(debouncedQuery);
-              setResults(newResults);
-            }
-          } else if (job.status === "failed") {
-            setActiveJobId(undefined);
-          }
-        }
-      } catch (e) {
-        console.error("Polling error", e);
-      }
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [activeJobId, debouncedQuery]);
 
   // Handle homepage prescription handoff
   useEffect(() => {
@@ -307,6 +279,15 @@ function SearchContent() {
     setActiveChipIndex(null);
   }, []);
 
+  const handleJobComplete = useCallback(async () => {
+    setActiveJobId(undefined);
+    // Re-fetch results to show new data
+    if (debouncedQuery) {
+      const { results: newResults } = await fetchSearchResults(debouncedQuery);
+      setResults(newResults);
+    }
+  }, [debouncedQuery]);
+
   const hasPrescriptionMedicines = prescriptionMedicines.length > 0;
 
   return (
@@ -396,10 +377,12 @@ function SearchContent() {
         {/* Results area */}
         <div className="space-y-6">
           {activeJobId && (
-            <div className="fade-in flex animate-in items-center justify-center gap-2 text-muted-foreground text-sm">
-              <RefreshCwIcon className="size-3.5 animate-spin" />
-              Searching live pharmacy prices...
-            </div>
+            <SearchProgressUI
+              isActive={!!activeJobId}
+              jobId={activeJobId}
+              onComplete={handleJobComplete}
+              query={debouncedQuery}
+            />
           )}
 
           {loading && <LoadingSkeleton />}

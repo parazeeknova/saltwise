@@ -152,3 +152,27 @@ export const searchHistory = pgTable(
   },
   (table) => [index("search_history_user_id_idx").on(table.userId)]
 );
+
+export const drugAiCache = pgTable(
+  "saltwise_drug_ai_cache",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    drugId: uuid("drug_id")
+      .notNull()
+      .references(() => drugs.id, { onDelete: "cascade" }),
+    cacheType: text("cache_type", {
+      enum: ["safety_info", "interactions", "ai_explanation"],
+    }).notNull(),
+    content: jsonb("content").notNull(),
+    model: text("model").notNull(),
+    saltComposition: text("salt_composition").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    index("drug_ai_cache_drug_id_idx").on(table.drugId),
+    unique("drug_ai_cache_drug_type_unique").on(table.drugId, table.cacheType),
+  ]
+);
